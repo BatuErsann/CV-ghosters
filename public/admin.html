@@ -16,6 +16,14 @@
         </div>
         <a class="back-link" href="/">← Uygulamaya dön</a>
       </header>
+      <section class="login-panel hidden" id="setup-panel">
+        <h2>2FA kurulumu gerekli</h2>
+        <p>Bu admin hesabında henüz authenticator doğrulaması tanımlanmamış. Önce admin bilgilerinizi doğrulayın, ardından authenticator uygulamanıza yeni hesabı ekleyin.</p>
+        <form id="setup-start-form"><label>Kullanıcı adı<input name="username" autocomplete="username" required /></label><label>Şifre<input name="password" type="password" autocomplete="current-password" required /></label><button class="primary-button" type="submit">2FA kurulumunu başlat</button></form>
+        <div class="setup-secret hidden" id="setup-secret"><strong>Authenticator’a ekleyin</strong><p>Uygulamanız QR kabul etmiyorsa bu secret’ı manuel girin:</p><code id="setup-secret-value"></code><p class="setup-uri-label">Kurulum bağlantısı</p><input id="setup-uri" readonly /></div>
+        <form class="hidden" id="setup-confirm-form"><label>Authenticator kodu<input name="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code" required /></label><button class="primary-button" type="submit">2FA’yı kaydet</button></form>
+        <div class="login-error hidden" id="setup-error"></div>
+      </section>
       <section class="login-panel" id="login-panel">
         <h2>Admin girişi</h2>
         <p>Yönetim paneline erişmek için kullanıcı adı, şifre ve authenticator kodu gerekir.</p>

@@ -8,10 +8,12 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check src/domain.js && node --check public/app.js"
+    "check": "node --check server.js && node --check api/[...route].js && node --check src/domain.js && node --check public/app.js && node --check public/admin.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "busboy": "^1.6.0",
+    "pg": "^8.23.0",
     "sharp": "^0.35.4",
     "tesseract.js": "^6.0.1"
   },

@@ -4,6 +4,8 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const Busboy = require("busboy");
+const { Pool } = require("pg");
+const { createClient } = require("@supabase/supabase-js");
 const { extractCandidate, findBestMatch, diffVersion } = require("./src/domain");
 const { recognizeImage } = require("./src/ocr");
 
@@ -18,6 +20,7 @@ const pendingPreviews = new Map();
 const adminChallenges = new Map();
 const adminSessions = new Map();
 const adminLoginAttempts = new Map();
+const adminSetupChallenges = new Map();
 
 function loadDotEnv() {
   const envPath = path.join(ROOT, ".env");
@@ -35,11 +38,18 @@ function loadDotEnv() {
 
 loadDotEnv();
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
-const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
-const ADMIN_TOTP_SECRET = process.env.ADMIN_TOTP_SECRET || "";
-const ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "";
+let ADMIN_USERNAME = process.env.ADMIN_USERNAME || "";
+let ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
+let ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
+let ADMIN_TOTP_SECRET = process.env.ADMIN_TOTP_SECRET || "";
+let ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "";
+const DATABASE_URL = process.env.DATABASE_URL || "";
+const SUPABASE_URL = process.env.SUPABASE_URL || "";
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "evidence";
+let databasePool = null;
+let databaseReady = null;
+let storageClient = null;
 
 function id(prefix) {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
@@ -66,9 +76,32 @@ function totpCode(secret, timestamp = Date.now()) {
 }
 
 function verifyTotp(code) {
+  return verifyTotpForSecret(code, ADMIN_TOTP_SECRET);
+}
+
+function verifyTotpForSecret(code, secret) {
   const normalized = String(code || "").replace(/\s/g, "");
-  if (!/^\d{6}$/.test(normalized) || !ADMIN_TOTP_SECRET) return false;
-  return [-1, 0, 1].some((offset) => totpCode(ADMIN_TOTP_SECRET, Date.now() + offset * 30000) === normalized);
+  if (!/^\d{6}$/.test(normalized) || !secret) return false;
+  return [-1, 0, 1].some((offset) => totpCode(secret, Date.now() + offset * 30000) === normalized);
+}
+
+function base32Encode(buffer) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  let bits = "";
+  for (const byte of buffer) bits += byte.toString(2).padStart(8, "0");
+  let output = "";
+  for (let index = 0; index < bits.length; index += 5) output += alphabet[parseInt(bits.slice(index, index + 5).padEnd(5, "0"), 2)];
+  return output;
+}
+
+function updateDotEnv(key, value) {
+  const envPath = path.join(ROOT, ".env");
+  const lines = fs.existsSync(envPath) ? fs.readFileSync(envPath, "utf8").split(/\r?\n/) : [];
+  const line = `${key}=${value}`;
+  const index = lines.findIndex((item) => item.trim().startsWith(`${key}=`));
+  if (index >= 0) lines[index] = line;
+  else lines.push(line);
+  fs.writeFileSync(envPath, `${lines.filter((item, position) => item || position < lines.length - 1).join("\n")}\n`, "utf8");
 }
 
 function verifyAdminPassword(password) {
@@ -234,15 +267,40 @@ function ensureStore() {
   if (!fs.existsSync(STORE_FILE)) fs.writeFileSync(STORE_FILE, JSON.stringify(seedStore(), null, 2));
 }
 
-function readStore() {
+function localReadStore() {
   ensureStore();
   return JSON.parse(fs.readFileSync(STORE_FILE, "utf8"));
 }
 
-function writeStore(store) {
+function localWriteStore(store) {
+  ensureStore();
   const temporaryFile = `${STORE_FILE}.tmp`;
   fs.writeFileSync(temporaryFile, JSON.stringify(store, null, 2));
   fs.renameSync(temporaryFile, STORE_FILE);
+}
+
+async function ensureDatabase() {
+  if (!DATABASE_URL) return null;
+  if (!databasePool) databasePool = new Pool({ connectionString: DATABASE_URL, max: 3, ssl: { rejectUnauthorized: false } });
+  if (!databaseReady) databaseReady = databasePool.query("CREATE TABLE IF NOT EXISTS cvghost_app_state (id text PRIMARY KEY, payload jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
+  await databaseReady;
+  return databasePool;
+}
+
+async function readStore() {
+  const pool = await ensureDatabase();
+  if (!pool) return localReadStore();
+  const result = await pool.query("SELECT payload FROM cvghost_app_state WHERE id = $1", ["main"]);
+  if (result.rows[0]) return result.rows[0].payload;
+  const initial = seedStore();
+  await pool.query("INSERT INTO cvghost_app_state (id, payload) VALUES ($1, $2::jsonb)", ["main", JSON.stringify(initial)]);
+  return initial;
+}
+
+async function writeStore(store) {
+  const pool = await ensureDatabase();
+  if (!pool) return localWriteStore(store);
+  await pool.query("INSERT INTO cvghost_app_state (id, payload, updated_at) VALUES ($1, $2::jsonb, now()) ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = now()", ["main", JSON.stringify(store)]);
 }
 
 function latestVersion(listing) {
@@ -476,20 +534,28 @@ async function extractPublicJobDetails(sourceUrl) {
   }
 }
 
-function saveEvidence(evidence) {
+async function saveEvidence(evidence) {
   if (!evidence?.buffer?.length) return null;
   const extension = evidence.mimeType === "image/png" ? "png" : evidence.mimeType === "image/webp" ? "webp" : "jpg";
   const storageKey = `${id("evidence")}.${extension}`;
-  fs.writeFileSync(path.join(DATA_DIR, "evidence", storageKey), evidence.buffer);
+  if (DATABASE_URL) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw new Error("Supabase Storage ayarları eksik.");
+    if (!storageClient) storageClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { error } = await storageClient.storage.from(SUPABASE_STORAGE_BUCKET).upload(storageKey, evidence.buffer, { contentType: evidence.mimeType, upsert: false });
+    if (error) throw new Error(`Kanıt görseli saklanamadı: ${error.message}`);
+  } else {
+    ensureStore();
+    fs.writeFileSync(path.join(DATA_DIR, "evidence", storageKey), evidence.buffer);
+  }
   return { storageKey, filename: evidence.filename, mimeType: evidence.mimeType, size: evidence.buffer.length };
 }
 
-function handleSubmission(store, body) {
+async function handleSubmission(store, body) {
   const submissionId = id("submission");
   const candidate = extractCandidate({ rawText: body.rawText, sourceUrl: body.sourceUrl || "" });
   const match = findBestMatch(candidate, store.listings);
   const applicationInsight = calculateApplicationInsight({ appliedAt: body.appliedAt || candidate.appliedAt, repostedAt: body.repostedAt || candidate.repostedAt, cvViewedStatus: body.cvViewedStatus });
-  const evidence = body.evidence?.buffer ? saveEvidence(body.evidence) : body.evidence || null;
+  const evidence = body.evidence?.buffer ? await saveEvidence(body.evidence) : body.evidence || null;
   const submission = {
     id: submissionId,
     inputType: body.inputType || "TEXT",
@@ -637,6 +703,37 @@ async function route(request, response) {
 
   if (pathname.startsWith("/api/")) {
     if (!checkRateLimit(request, pathname)) return sendError(response, 429, "RATE_LIMITED", "Bu işlem için kısa süreli istek sınırına ulaşıldı.");
+    if (request.method === "GET" && pathname === "/api/admin/setup-status") {
+      return sendJson(response, 200, { configured: Boolean(ADMIN_TOTP_SECRET), usernameConfigured: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD_HASH) });
+    }
+
+    if (request.method === "POST" && pathname === "/api/admin/setup/start") {
+      if (ADMIN_TOTP_SECRET) return sendError(response, 409, "ADMIN_2FA_ALREADY_CONFIGURED", "2FA zaten tanımlı.");
+      const body = await readJson(request);
+      if (!ADMIN_USERNAME || !ADMIN_PASSWORD_HASH || !ADMIN_SESSION_SECRET) return sendError(response, 503, "ADMIN_NOT_CONFIGURED", "Admin temel güvenlik ayarları eksik.");
+      if (String(body.username || "") !== ADMIN_USERNAME || !verifyAdminPassword(body.password)) return sendError(response, 401, "ADMIN_LOGIN_FAILED", "Kullanıcı adı veya şifre hatalı.");
+      const secret = base32Encode(crypto.randomBytes(20));
+      const challengeToken = adminToken("setup");
+      adminSetupChallenges.set(challengeToken, { secret, createdAt: Date.now(), attempts: 0 });
+      const label = encodeURIComponent(ADMIN_EMAIL || ADMIN_USERNAME);
+      return sendJson(response, 200, { challengeToken, secret, otpauthUri: `otpauth://totp/CV%20ghostlayanlar:${label}?secret=${secret}&issuer=CV%20ghostlayanlar` });
+    }
+
+    if (request.method === "POST" && pathname === "/api/admin/setup/confirm") {
+      const body = await readJson(request);
+      const challenge = adminSetupChallenges.get(String(body.challengeToken || ""));
+      if (!challenge || Date.now() - challenge.createdAt > 10 * 60000) return sendError(response, 401, "ADMIN_SETUP_EXPIRED", "2FA kurulum oturumunun süresi doldu.");
+      if (!verifyTotpForSecret(body.code, challenge.secret)) {
+        challenge.attempts += 1;
+        if (challenge.attempts >= 5) adminSetupChallenges.delete(body.challengeToken);
+        return sendError(response, 401, "ADMIN_2FA_FAILED", "2FA kodu geçersiz.");
+      }
+      updateDotEnv("ADMIN_TOTP_SECRET", challenge.secret);
+      ADMIN_TOTP_SECRET = challenge.secret;
+      adminSetupChallenges.delete(body.challengeToken);
+      return sendJson(response, 200, { configured: true });
+    }
+
     if (request.method === "GET" && pathname === "/api/admin/session") {
       const session = adminSession(request);
       if (!session) return sendError(response, 401, "ADMIN_AUTH_REQUIRED", "Admin girişi gerekli.");
@@ -682,7 +779,7 @@ async function route(request, response) {
     if (pathname.startsWith("/api/admin/")) {
       if (!requireAdmin(request, response)) return;
     }
-    const store = readStore();
+    const store = await readStore();
     if (request.method === "GET" && pathname === "/api/stats") return sendJson(response, 200, buildStats(store));
     if (request.method === "GET" && pathname === "/api/admin/listings") return sendJson(response, 200, { items: buildAdminListings(store), reportCount: store.reports.length });
     const adminDeleteMatch = pathname.match(/^\/api\/admin\/listings\/([^/]+)$/);
@@ -700,7 +797,7 @@ async function route(request, response) {
         const evidencePath = path.join(DATA_DIR, "evidence", storageKey);
         if (fs.existsSync(evidencePath)) fs.unlinkSync(evidencePath);
       }
-      writeStore(store);
+      await writeStore(store);
       return sendJson(response, 200, { deleted: true, listingId: removed.id });
     }
     if (request.method === "GET" && pathname === "/api/companies") return sendJson(response, 200, { items: buildCompanyDirectory(store) });
@@ -723,8 +820,8 @@ async function route(request, response) {
       if (!pending) return sendError(response, 404, "PREVIEW_EXPIRED", "Onay bekleyen OCR sonucu bulunamadı. Görseli yeniden yükleyin.");
       const confirmation = await readBody(request);
       const finalBody = { ...pending.body, ...confirmation, deviceId: confirmation.deviceId || pending.body.deviceId, cvViewedStatus: confirmation.cvViewedStatus || pending.body.cvViewedStatus || "UNKNOWN" };
-      const result = handleSubmission(store, finalBody);
-      writeStore(store);
+      const result = await handleSubmission(store, finalBody);
+      await writeStore(store);
       pendingPreviews.delete(confirmMatch[1]);
       return sendJson(response, 201, { status: "CONFIRMED", ...result });
     }
@@ -754,7 +851,7 @@ async function route(request, response) {
       if (request.method === "POST" && action === "verify") {
         listing.verifications += 1;
         listing.events.unshift({ id: id("event"), type: "VERIFIED", label: "Topluluk doğrulaması eklendi", at: new Date().toISOString(), detail: "Bir topluluk üyesi mevcut ilan sürümünü doğruladı." });
-        writeStore(store);
+        await writeStore(store);
         return sendJson(response, 200, { listing: serializeListing(listing) });
       }
       if (request.method === "POST" && action === "corrections") {
@@ -767,14 +864,14 @@ async function route(request, response) {
         listing.versions.push(version);
         listing.lastSeenAt = version.observedAt;
         listing.events.unshift({ id: id("event"), type: "CORRECTION", label: "Topluluk düzeltmesi eklendi", at: version.observedAt, detail: changes.map((change) => `${change.label}: ${change.oldValue ?? "—"} → ${change.newValue ?? "—"}`).join(" · ") });
-        writeStore(store);
+        await writeStore(store);
         return sendJson(response, 200, { listing: serializeListing(listing), changes });
       }
       if (request.method === "POST" && action === "report") {
         const body = await readBody(request);
         if (!body.reason || String(body.reason).trim().length < 3) return sendError(response, 422, "VALIDATION_ERROR", "Rapor nedeni gerekli.", { reason: "En az 3 karakter girin." });
         store.reports.push({ id: id("report"), listingId: listing.id, reason: String(body.reason).trim(), details: String(body.details || "").trim(), status: "OPEN", createdAt: new Date().toISOString() });
-        writeStore(store);
+        await writeStore(store);
         return sendJson(response, 201, { accepted: true, message: "Rapor moderasyon kuyruğuna alındı." });
       }
     }

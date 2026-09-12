@@ -7,6 +7,11 @@ function showLoginError(message) {
   $("#login-error").classList.remove("hidden");
 }
 
+function showSetupError(message) {
+  $("#setup-error").textContent = message;
+  $("#setup-error").classList.remove("hidden");
+}
+
 function showAdminApp() {
   $("#login-panel").classList.add("hidden");
   $("#admin-app").classList.remove("hidden");
@@ -44,6 +49,36 @@ $("#login-form").addEventListener("submit", async (event) => {
   } catch (error) { showLoginError(error.message); }
 });
 
+$("#setup-start-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    const response = await fetch("/api/admin/setup/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: form.get("username"), password: form.get("password") }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || "2FA kurulumu başlatılamadı.");
+    window.setupChallenge = data.challengeToken;
+    $("#setup-secret-value").textContent = data.secret;
+    $("#setup-uri").value = data.otpauthUri;
+    $("#setup-secret").classList.remove("hidden");
+    $("#setup-start-form").classList.add("hidden");
+    $("#setup-confirm-form").classList.remove("hidden");
+    $("#setup-confirm-form input").focus();
+  } catch (error) { showSetupError(error.message); }
+});
+
+$("#setup-confirm-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = new FormData(event.currentTarget);
+  try {
+    const response = await fetch("/api/admin/setup/confirm", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challengeToken: window.setupChallenge, code: form.get("code") }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error?.message || "2FA kurulumu tamamlanamadı.");
+    $("#setup-panel").classList.add("hidden");
+    $("#login-panel").classList.remove("hidden");
+    showLoginError("2FA tanımlandı. Şimdi normal giriş yapabilirsiniz.");
+  } catch (error) { showSetupError(error.message); }
+});
+
 $("#twofa-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
@@ -62,6 +97,13 @@ $("#logout-button").addEventListener("click", async () => {
 
 (async function init() {
   try {
+    const setupResponse = await fetch("/api/admin/setup-status");
+    const setup = await setupResponse.json();
+    if (!setup.configured) {
+      $("#login-panel").classList.add("hidden");
+      $("#setup-panel").classList.remove("hidden");
+      return;
+    }
     const response = await fetch("/api/admin/session");
     if (response.ok) showAdminApp();
   } catch { /* giriş ekranı gösterilir */ }
