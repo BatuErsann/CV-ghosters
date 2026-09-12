@@ -48,6 +48,7 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "evidence";
+const ADSENSE_CLIENT = process.env.PUBLIC_ADSENSE_CLIENT || "";
 let databasePool = null;
 let databaseReady = null;
 let storageClient = null;
@@ -704,6 +705,9 @@ async function route(request, response) {
 
   if (pathname.startsWith("/api/")) {
     if (!checkRateLimit(request, pathname)) return sendError(response, 429, "RATE_LIMITED", "Bu işlem için kısa süreli istek sınırına ulaşıldı.");
+    if (request.method === "GET" && pathname === "/api/ads-config") {
+      return sendJson(response, 200, { enabled: Boolean(ADSENSE_CLIENT), client: ADSENSE_CLIENT || null });
+    }
     if (request.method === "GET" && pathname === "/api/admin/setup-status") {
       return sendJson(response, 200, { configured: Boolean(ADMIN_TOTP_SECRET && ADMIN_2FA_SETUP_COMPLETE), usernameConfigured: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD_HASH) });
     }
