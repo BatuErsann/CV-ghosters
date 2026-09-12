@@ -48,7 +48,8 @@ const DATABASE_URL = process.env.DATABASE_URL || "";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "evidence";
-const ADSENSE_CLIENT = process.env.PUBLIC_ADSENSE_CLIENT || "";
+const ADSENSE_CLIENT = /^ca-pub-\d+$/.test(process.env.PUBLIC_ADSENSE_CLIENT || "") ? process.env.PUBLIC_ADSENSE_CLIENT : "";
+const ADSENSE_HEAD_SCRIPT = ADSENSE_CLIENT ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}" crossorigin="anonymous"></script>` : "";
 let databasePool = null;
 let databaseReady = null;
 let storageClient = null;
@@ -947,6 +948,10 @@ async function route(request, response) {
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) return sendError(response, 404, "NOT_FOUND", "Sayfa bulunamadı.");
   const contentTypes = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml" };
   response.writeHead(200, { "Content-Type": contentTypes[path.extname(filePath)] || "application/octet-stream" });
+  if (path.extname(filePath) === ".html") {
+    const html = fs.readFileSync(filePath, "utf8").replace("<!-- ADSENSE_HEAD -->", ADSENSE_HEAD_SCRIPT);
+    return response.end(html);
+  }
   fs.createReadStream(filePath).pipe(response);
 }
 
