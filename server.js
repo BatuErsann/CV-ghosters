@@ -43,6 +43,7 @@ let ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH || "";
 let ADMIN_EMAIL = process.env.ADMIN_EMAIL || "";
 let ADMIN_TOTP_SECRET = process.env.ADMIN_TOTP_SECRET || "";
 let ADMIN_SESSION_SECRET = process.env.ADMIN_SESSION_SECRET || "";
+let ADMIN_2FA_SETUP_COMPLETE = process.env.ADMIN_2FA_SETUP_COMPLETE === "true";
 const DATABASE_URL = process.env.DATABASE_URL || "";
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
@@ -704,12 +705,12 @@ async function route(request, response) {
   if (pathname.startsWith("/api/")) {
     if (!checkRateLimit(request, pathname)) return sendError(response, 429, "RATE_LIMITED", "Bu işlem için kısa süreli istek sınırına ulaşıldı.");
     if (request.method === "GET" && pathname === "/api/admin/setup-status") {
-      return sendJson(response, 200, { configured: Boolean(ADMIN_TOTP_SECRET), usernameConfigured: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD_HASH) });
+      return sendJson(response, 200, { configured: Boolean(ADMIN_TOTP_SECRET && ADMIN_2FA_SETUP_COMPLETE), usernameConfigured: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD_HASH) });
     }
 
     if (request.method === "POST" && pathname === "/api/admin/setup/start") {
-      if (ADMIN_TOTP_SECRET) return sendError(response, 409, "ADMIN_2FA_ALREADY_CONFIGURED", "2FA zaten tanımlı.");
-      const body = await readJson(request);
+      if (ADMIN_2FA_SETUP_COMPLETE) return sendError(response, 409, "ADMIN_2FA_ALREADY_CONFIGURED", "2FA zaten tanımlı.");
+      const body = await readBody(request);
       if (!ADMIN_USERNAME || !ADMIN_PASSWORD_HASH || !ADMIN_SESSION_SECRET) return sendError(response, 503, "ADMIN_NOT_CONFIGURED", "Admin temel güvenlik ayarları eksik.");
       if (String(body.username || "") !== ADMIN_USERNAME || !verifyAdminPassword(body.password)) return sendError(response, 401, "ADMIN_LOGIN_FAILED", "Kullanıcı adı veya şifre hatalı.");
       const secret = base32Encode(crypto.randomBytes(20));
@@ -720,7 +721,7 @@ async function route(request, response) {
     }
 
     if (request.method === "POST" && pathname === "/api/admin/setup/confirm") {
-      const body = await readJson(request);
+      const body = await readBody(request);
       const challenge = adminSetupChallenges.get(String(body.challengeToken || ""));
       if (!challenge || Date.now() - challenge.createdAt > 10 * 60000) return sendError(response, 401, "ADMIN_SETUP_EXPIRED", "2FA kurulum oturumunun süresi doldu.");
       if (!verifyTotpForSecret(body.code, challenge.secret)) {
@@ -729,7 +730,9 @@ async function route(request, response) {
         return sendError(response, 401, "ADMIN_2FA_FAILED", "2FA kodu geçersiz.");
       }
       updateDotEnv("ADMIN_TOTP_SECRET", challenge.secret);
+      updateDotEnv("ADMIN_2FA_SETUP_COMPLETE", "true");
       ADMIN_TOTP_SECRET = challenge.secret;
+      ADMIN_2FA_SETUP_COMPLETE = true;
       adminSetupChallenges.delete(body.challengeToken);
       return sendJson(response, 200, { configured: true });
     }
@@ -741,6 +744,7 @@ async function route(request, response) {
     }
     if (request.method === "POST" && pathname === "/api/admin/login") {
       if (!ADMIN_USERNAME || !ADMIN_PASSWORD_HASH || !ADMIN_TOTP_SECRET || !ADMIN_SESSION_SECRET) return sendError(response, 503, "ADMIN_NOT_CONFIGURED", "Admin güvenlik ayarları eksik.");
+      if (!ADMIN_2FA_SETUP_COMPLETE) return sendError(response, 409, "ADMIN_2FA_SETUP_REQUIRED", "Önce 2FA kurulumunu tamamlayın.");
       const ip = request.socket.remoteAddress || "unknown";
       const now = Date.now();
       const attempts = adminLoginAttempts.get(ip) || { count: 0, startedAt: now };
@@ -954,4 +958,7 @@ if (require.main === module) {
   server.listen(PORT, () => console.log(`CV ghostlayanlar http://localhost:${PORT}`));
 }
 
-module.exports = { server, seedStore, buildStats };
+module.exports = server;
+module.exports.server = server;
+module.exports.seedStore = seedStore;
+module.exports.buildStats = buildStats;
