@@ -1,0 +1,21 @@
+{
+  "name": "ilan-iz",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Topluluk tabanlı iş ilanı geçmişi platformu için çalıştırılabilir MVP dikey dilimi.",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node --check src/domain.js && node --check public/app.js"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "sharp": "^0.35.4",
+    "tesseract.js": "^6.0.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

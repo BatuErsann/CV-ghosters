@@ -1,0 +1,196 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole { MEMBER MODERATOR ADMIN }
+enum ListingStatus { ACTIVE INACTIVE ARCHIVED UNDER_REVIEW }
+enum SubmissionStatus { RECEIVED PROCESSING NEEDS_REVIEW ACCEPTED REJECTED }
+enum OcrStatus { NOT_REQUIRED QUEUED PROCESSING COMPLETED FAILED }
+enum ModerationStatus { PENDING APPROVED REJECTED }
+enum VerificationDecision { CONFIRM DISPUTE }
+enum CvViewedStatus { VIEWED NOT_VIEWED UNKNOWN }
+
+model User {
+  id              String         @id @default(cuid())
+  email           String         @unique
+  username        String         @unique
+  passwordHash    String?
+  role            UserRole       @default(MEMBER)
+  reputationScore Int            @default(0)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+  submissions     Submission[]
+  verifications   Verification[]
+  corrections     FieldCorrection[]
+  reports         Report[]
+  auditLogs       AuditLog[]
+}
+
+model Company {
+  id             String       @id @default(cuid())
+  canonicalName  String
+  displayName    String
+  normalizedName String       @unique
+  websiteDomain  String?
+  listings       JobListing[]
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model JobListing {
+  id             String          @id @default(cuid())
+  companyId      String
+  status         ListingStatus   @default(UNDER_REVIEW)
+  firstSeenAt    DateTime
+  lastSeenAt     DateTime
+  company        Company         @relation(fields: [companyId], references: [id])
+  versions       ListingVersion[]
+  submissions    Submission[]
+  events         TimelineEvent[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  @@index([companyId, status])
+  @@index([lastSeenAt])
+}
+
+model ListingVersion {
+  id                String          @id @default(cuid())
+  listingId         String
+  versionNumber     Int
+  title             String
+  normalizedTitle   String
+  locationText      String?
+  countryCode       String?
+  employmentType    String?
+  workMode          String?
+  description       String
+  salaryMin         Int?
+  salaryMax         Int?
+  salaryCurrency    String?
+  salaryPeriod      String?
+  applicationUrl    String?
+  contentHash       String
+  confidenceScore   Float?
+  observedAt        DateTime
+  listing           JobListing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  sourceSubmission  Submission?      @relation(fields: [sourceSubmissionId], references: [id])
+  sourceSubmissionId String?
+  verifications     Verification[]
+  corrections       FieldCorrection[]
+  @@unique([listingId, versionNumber])
+  @@unique([listingId, contentHash])
+  @@index([normalizedTitle])
+}
+
+model Submission {
+  id               String             @id @default(cuid())
+  userId           String?
+  listingId        String?
+  inputType        String
+  sourceUrl        String?
+  rawText          String?
+  status           SubmissionStatus   @default(RECEIVED)
+  ocrStatus        OcrStatus          @default(NOT_REQUIRED)
+  moderationStatus ModerationStatus   @default(PENDING)
+  deviceId         String?
+  appliedAt        DateTime?
+  repostedAt       DateTime?
+  cvViewedStatus   CvViewedStatus     @default(UNKNOWN)
+  cvViewedAt       DateTime?
+  applicationInsightJson Json?
+  user             User?              @relation(fields: [userId], references: [id])
+  listing           JobListing?        @relation(fields: [listingId], references: [id])
+  evidence          Evidence[]
+  versions          ListingVersion[]
+  createdAt         DateTime           @default(now())
+  processedAt       DateTime?
+  @@index([status, createdAt])
+}
+
+model Evidence {
+  id                String      @id @default(cuid())
+  submissionId      String
+  storageKey        String
+  mimeType          String
+  fileSize          Int
+  sha256            String
+  retentionExpiresAt DateTime?
+  visibility        String      @default("PRIVATE")
+  submission        Submission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  createdAt         DateTime    @default(now())
+  deletedAt         DateTime?
+  @@index([retentionExpiresAt])
+}
+
+model Verification {
+  id               String               @id @default(cuid())
+  listingVersionId String
+  userId           String
+  decision         VerificationDecision
+  comment          String?
+  listingVersion   ListingVersion       @relation(fields: [listingVersionId], references: [id], onDelete: Cascade)
+  user             User                 @relation(fields: [userId], references: [id])
+  createdAt        DateTime             @default(now())
+  @@unique([listingVersionId, userId])
+}
+
+model FieldCorrection {
+  id               String         @id @default(cuid())
+  submissionId     String?
+  listingVersionId String
+  userId           String
+  fieldName        String
+  oldValue         String?
+  newValue         String
+  status           ModerationStatus @default(PENDING)
+  submission       Submission?    @relation(fields: [submissionId], references: [id])
+  listingVersion   ListingVersion @relation(fields: [listingVersionId], references: [id], onDelete: Cascade)
+  user             User            @relation(fields: [userId], references: [id])
+  createdAt        DateTime       @default(now())
+}
+
+model TimelineEvent {
+  id         String     @id @default(cuid())
+  listingId  String
+  type       String
+  label      String
+  detail     String?
+  oldValue   String?
+  newValue   String?
+  occurredAt DateTime
+  listing    JobListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+  @@index([listingId, occurredAt])
+}
+
+model Report {
+  id         String   @id @default(cuid())
+  reporterId String
+  targetType String
+  targetId   String
+  reason     String
+  details    String?
+  status     String   @default("OPEN")
+  reporter   User     @relation(fields: [reporterId], references: [id])
+  createdAt  DateTime @default(now())
+  resolvedAt DateTime?
+  @@index([targetType, targetId, status])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorUserId String?
+  action     String
+  entityType String
+  entityId   String
+  metadataJson Json?
+  actor      User?    @relation(fields: [actorUserId], references: [id])
+  createdAt  DateTime @default(now())
+  @@index([entityType, entityId, createdAt])
+}
