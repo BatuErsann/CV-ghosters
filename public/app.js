@@ -56,6 +56,7 @@ async function loadListings() {
   if (state.selectedId && !state.listings.some((item) => item.id === state.selectedId)) state.selectedId = state.listings[0]?.id || null;
   renderListings();
   if (state.selectedId) renderDetail(state.selectedId);
+  window.dispatchEvent(new Event("cvghost:content-ready"));
 }
 
 async function loadRecent() {
@@ -64,6 +65,7 @@ async function loadRecent() {
   $("#recent-list").innerHTML = items.length ? items.slice(0, 8).map((item) => `<article class="recent-row" data-listing-id="${item.listingId}"><div class="recent-status ${item.applicationInsight?.tone || "neutral"}">${item.applicationInsight?.type === "POOL_SIGNAL" ? "!" : "✓"}</div><div class="recent-main"><div><strong>${escapeHtml(item.title)}</strong><span class="recent-company">${escapeHtml(item.company)}</span></div><p>${escapeHtml(item.applicationInsight?.detail || "Başvuru hareketi kaydedildi.")}</p><small>${item.appliedAt ? `Başvuru: ${formatDate(item.appliedAt)}` : "Başvuru tarihi yok"}${item.repostedAt ? ` · Yeniden yayın: ${formatDate(item.repostedAt)}` : ""} · ${item.hasEvidence ? "OCR kanıtı var" : "Kanıt yok"}</small></div><span class="recent-arrow">→</span></article>`).join("") : `<div class="recent-empty">${recentFilter === "mine" ? "Bu cihazdan henüz kayıt eklenmedi." : "Henüz son eklenen kayıt yok."}<button class="text-button" id="empty-submit">İlk kanıtı ekle →</button></div>`;
   $$(".recent-row").forEach((row) => row.addEventListener("click", () => selectListing(row.dataset.listingId)));
   $("#empty-submit")?.addEventListener("click", openSubmit);
+  window.dispatchEvent(new Event("cvghost:content-ready"));
 }
 
 async function selectListing(id) { state.selectedId = id; renderListings(); await renderDetail(id); }

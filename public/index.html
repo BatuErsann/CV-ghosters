@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0c1715" />
     <title>CV ghostlayanlar — İş ilanlarının geçmişi</title>
-    <link rel="stylesheet" href="/styles.css?v=4" />
+    <link rel="stylesheet" href="/styles.css?v=5" />
     <!-- ADSENSE_HEAD -->
   </head>
   <body>
     <div class="app-shell">
-      <div class="ad-rail ad-rail-left" aria-label="Reklam"></div>
       <aside class="sidebar">
         <div class="brand"><span>CV <span class="brand-accent">ghostlayanlar</span></span></div>
         <div class="sidebar-label">Çalışma alanı</div>
@@ -59,13 +58,12 @@
         <section class="content-wrap hidden" id="stats-view"><div class="page-intro"><div class="eyebrow">SİNYALLER</div><h1>Topluluk verisi</h1><p>İlan geçmişlerinden oluşan daha geniş resim.</p></div><div class="stats-board" id="stats-board"></div></section>
         <section class="content-wrap hidden" id="companies-view"><div class="page-intro"><div class="eyebrow">ŞİRKET ARŞİVİ</div><h1>Şirketler</h1><p>Her şirketin tekrar eden ilanlarını ve ilan geçmişindeki sinyalleri inceleyin.</p></div><div class="company-layout"><div class="company-directory" id="company-directory"></div><aside class="company-detail-panel" id="company-detail-panel"><div class="empty-detail"><div class="empty-orb">⌂</div><h3>Bir şirket seçin</h3><p>Şirketin ilan tekrarlarını ve son durumunu görmek için listeden bir şirket seçin.</p></div></aside></div></section>
       </main>
-      <div class="ad-rail ad-rail-right" aria-label="Reklam"></div>
     </div>
 
     <div class="modal-backdrop hidden" id="submit-modal"><div class="modal"><button class="modal-close" id="close-submit">×</button><div class="eyebrow">BAŞVURU KANITI</div><h2>Başvuru hareketini kaydet</h2><p class="modal-subtitle">İlan ekran görüntüsünü yükle. İlan bilgilerini OCR çıkaracak; senden yalnızca CV görüntülenme durumunu alacağız.</p><form id="submit-form"><label>İlan görseli <span>zorunlu · PNG, JPG veya WEBP · maksimum 8 MB</span><input name="evidence" type="file" accept="image/png,image/jpeg,image/webp" required /></label><label>CV görüntülenme durumu<select name="cvViewedStatus"><option value="NOT_VIEWED">CV görüntülenmedi</option><option value="UNKNOWN">Bilinmiyor</option><option value="VIEWED">CV görüntülendi</option></select></label><label>Kaynak URL <span>OCR kritik alanları kaçırırsa doğrulama için istenir</span><input name="sourceUrl" type="url" placeholder="https://..." /></label><div class="form-hint">OCR; pozisyon, şirket, lokasyon ve diğer ilan bilgilerini görselden çıkarır. Okuma başarısız olursa eksik alanları ve doğrulama linkini isteyeceğiz.</div><button class="primary-button full" type="submit">OCR ile analiz et <span>→</span></button></form><div class="form-result hidden" id="form-result"></div><div class="confirmation-panel hidden" id="confirmation-panel"><div class="confirmation-title">Son durumu onaylayın</div><p class="confirmation-copy">OCR’ın çıkardığı bilgileri kontrol edin. Onaydan sonra kayıt son eklenenlerde görünür.</p><div id="confirmation-details" class="confirmation-details"></div><div class="confirmation-actions"><button class="secondary-button" id="cancel-confirmation" type="button">Düzenle</button><button class="primary-button" id="confirm-submission" type="button">Durumu onayla <span>→</span></button></div></div><div class="manual-fallback hidden" id="manual-fallback"><div class="fallback-title">OCR bazı alanları okuyamadı</div><p id="fallback-message">Eksik alanları doldurun; kaynak linkiyle kontrol edeceğiz.</p><form id="manual-form"><label>Pozisyon<input name="manualTitle" type="text" /></label><label>Şirket<input name="manualCompany" type="text" /></label><label>Lokasyon<input name="manualLocation" type="text" /></label><button class="primary-button full" type="submit">Linkle doğrula ve kaydet <span>→</span></button></form></div></div></div>
     <div class="toast hidden" id="toast"></div>
-    <script src="/app.js?v=4"></script>
+    <script src="/app.js?v=5"></script>
     <script src="/interaction-overrides.js?v=4"></script>
-    <script src="/ads.js?v=2"></script>
+    <script src="/ads.js?v=3"></script>
   </body>
 </html>
