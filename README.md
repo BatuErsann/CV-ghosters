@@ -47,4 +47,6 @@ npm run check
 
 Vercel'de `DATABASE_URL` kalıcı PostgreSQL veritabanını göstermelidir. Supabase projesi duraklatılırsa panelden Resume ile geri alınır. Bağlantı hatasından sonra sunucu sonraki istekte yeniden dener; veriler yerine demo kayıtlar döndürülmez. `/api/readiness` veritabanına gerçek bir sorgu yapar ve bağlantı yoksa 503 döndürür. `/api/health` yalnızca HTTP sunucusunun çalıştığını belirtir.
 
+Yeni üretim arşivleri boş başlar. Üç eski geliştirme örneği herkese açık ilan, şirket ve istatistik sonuçlarından hariç tutulur; depodaki kayıtlar ve yerel OCR denemeleri silinmez veya otomatik taşınmaz. Gerçek kayıtlar görsel yükleme ve kullanıcı onayı akışıyla eklenir.
+
 AdSense sahiplik doğrulaması `PUBLIC_ADSENSE_CLIENT` ile oluşturulan meta etiketi ve `/ads.txt` üzerinden yapılır. AdSense panelinde otomatik reklamlar kapalı kalmalıdır. `PUBLIC_ADSENSE_SLOT` boşken reklam betiği hiç yüklenmez. Onaylı bir manuel görüntülü reklam birimi tanımlandığında reklam yalnızca başarıyla yüklenmiş, ilan içeren keşif görünümünde istenir; boş sonuçlarda, hata/yüklenme durumlarında ve kanıt ekleme penceresinde gizlenir. Otomatik reklamları açmak bu sayfa kontrolünü geçersiz kılar.

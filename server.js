@@ -5,6 +5,7 @@ const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const Busboy = require("busboy");
 const { createDatabase } = require("./src/database");
+const { publicArchive, emptyArchive } = require("./src/archive");
 const { createClient } = require("@supabase/supabase-js");
 const { extractCandidate, findBestMatch, diffVersion } = require("./src/domain");
 const { recognizeImage } = require("./src/ocr");
@@ -296,7 +297,7 @@ async function readStore() {
   if (!pool) return localReadStore();
   const result = await pool.query("SELECT payload FROM cvghost_app_state WHERE id = $1", ["main"]);
   if (result.rows[0]) return result.rows[0].payload;
-  const initial = seedStore();
+  const initial = emptyArchive();
   await pool.query("INSERT INTO cvghost_app_state (id, payload) VALUES ($1, $2::jsonb)", ["main", JSON.stringify(initial)]);
   return initial;
 }
@@ -557,7 +558,7 @@ async function saveEvidence(evidence) {
 async function handleSubmission(store, body) {
   const submissionId = id("submission");
   const candidate = extractCandidate({ rawText: body.rawText, sourceUrl: body.sourceUrl || "" });
-  const match = findBestMatch(candidate, store.listings);
+  const match = findBestMatch(candidate, publicArchive(store).listings);
   const applicationInsight = calculateApplicationInsight({ appliedAt: body.appliedAt || candidate.appliedAt, repostedAt: body.repostedAt || candidate.repostedAt, cvViewedStatus: body.cvViewedStatus });
   const evidence = body.evidence?.buffer ? await saveEvidence(body.evidence) : body.evidence || null;
   const submission = {
@@ -796,7 +797,8 @@ async function route(request, response) {
       if (!requireAdmin(request, response)) return;
     }
     const store = await readStore();
-    if (request.method === "GET" && pathname === "/api/stats") return sendJson(response, 200, buildStats(store));
+    const archive = publicArchive(store);
+    if (request.method === "GET" && pathname === "/api/stats") return sendJson(response, 200, buildStats(archive));
     if (request.method === "GET" && pathname === "/api/admin/listings") return sendJson(response, 200, { items: buildAdminListings(store), reportCount: store.reports.length });
     const adminDeleteMatch = pathname.match(/^\/api\/admin\/listings\/([^/]+)$/);
     if (request.method === "DELETE" && adminDeleteMatch) {
@@ -816,17 +818,17 @@ async function route(request, response) {
       await writeStore(store);
       return sendJson(response, 200, { deleted: true, listingId: removed.id });
     }
-    if (request.method === "GET" && pathname === "/api/companies") return sendJson(response, 200, { items: buildCompanyDirectory(store) });
+    if (request.method === "GET" && pathname === "/api/companies") return sendJson(response, 200, { items: buildCompanyDirectory(archive) });
     const companyRoute = pathname.match(/^\/api\/companies\/([^/]+)$/);
     if (request.method === "GET" && companyRoute) {
       const companyKey = decodeURIComponent(companyRoute[1]).toLocaleLowerCase("tr-TR").trim();
-      const company = buildCompanyDirectory(store).find((item) => item.name.toLocaleLowerCase("tr-TR").trim() === companyKey);
+      const company = buildCompanyDirectory(archive).find((item) => item.name.toLocaleLowerCase("tr-TR").trim() === companyKey);
       if (!company) return sendError(response, 404, "NOT_FOUND", "Şirket bulunamadı.");
       return sendJson(response, 200, { company });
     }
     if (request.method === "GET" && pathname === "/api/recent") {
       const deviceId = requestUrl.searchParams.get("deviceId") || "";
-      const items = recentSubmissions(store, deviceId);
+      const items = recentSubmissions(archive, deviceId);
       return sendJson(response, 200, { items, total: items.length, mineCount: items.filter((item) => item.isMine).length });
     }
 
@@ -845,7 +847,7 @@ async function route(request, response) {
     if (request.method === "GET" && pathname === "/api/listings") {
       const query = (requestUrl.searchParams.get("q") || "").toLocaleLowerCase("tr-TR");
       const mode = requestUrl.searchParams.get("mode") || "ALL";
-      const items = store.listings
+      const items = archive.listings
         .map(serializeListing)
         .filter((item) => mode === "ALL" || item.workMode === mode)
         .filter((item) => !query || [item.title, item.company, item.location, item.description].join(" ").toLocaleLowerCase("tr-TR").includes(query))
@@ -855,7 +857,7 @@ async function route(request, response) {
 
     const listingMatch = pathname.match(/^\/api\/listings\/([^/]+)(?:\/(timeline|verify|corrections|statistics|report))?$/);
     if (listingMatch) {
-      const listing = store.listings.find((item) => item.id === listingMatch[1]);
+      const listing = archive.listings.find((item) => item.id === listingMatch[1]);
       if (!listing) return sendError(response, 404, "NOT_FOUND", "İlan bulunamadı.");
       const action = listingMatch[2];
       if (request.method === "GET" && !action) return sendJson(response, 200, { listing: serializeListing(listing), timeline: listing.events });
@@ -940,7 +942,7 @@ async function route(request, response) {
       const fields = validateSubmission(body);
       if (Object.keys(fields).length) return sendError(response, 422, "VALIDATION_ERROR", "Gönderilen veriler geçersiz.", fields);
       const candidate = extractCandidate({ rawText: body.rawText, sourceUrl: body.sourceUrl || "" });
-      const match = findBestMatch(candidate, store.listings);
+      const match = findBestMatch(candidate, archive.listings);
       const applicationInsight = calculateApplicationInsight({ appliedAt: body.appliedAt || candidate.appliedAt, repostedAt: body.repostedAt || candidate.repostedAt, cvViewedStatus: body.cvViewedStatus });
       const previewToken = id("preview");
       pendingPreviews.set(previewToken, { body, createdAt: Date.now() });

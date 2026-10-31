@@ -78,7 +78,7 @@ function renderInsights(stats) {
 
 function renderListings() {
   const grid = $("#listing-grid");
-  if (!state.listings.length) { grid.innerHTML = `<div class="empty-detail"><h3>Sonuç bulunamadı</h3><p>Arama kriterlerini değiştirip tekrar deneyin.</p></div>`; return; }
+  if (!state.listings.length) { grid.innerHTML = state.query || state.mode !== "ALL" ? `<div class="empty-detail"><h3>Sonuç bulunamadı</h3><p>Arama kriterlerini değiştirip tekrar deneyin.</p></div>` : `<div class="empty-detail"><h3>Henüz ilan kaydı yok</h3><p>İlan ekran görüntünüzü ekleyip bilgileri onaylayarak arşive ilk katkıyı yapabilirsiniz.</p></div>`; return; }
   grid.innerHTML = state.listings.map((item) => `<article class="listing-card ${item.id === state.selectedId ? "active" : ""}" data-id="${item.id}">
     <div class="card-top"><div class="company-line"><div class="company-avatar">${initials(item.company)}</div>${escapeHtml(item.company)}</div><span class="status ${item.status === "ACTIVE" ? "active" : "review"}">${item.status === "ACTIVE" ? "Aktif" : "İnceleme"}</span></div>
     <h3>${escapeHtml(item.title)}</h3><div class="card-meta"><span>⌖ ${escapeHtml(item.location)}</span><span>${modeIcon[item.workMode] || "·"} ${modeLabel[item.workMode] || item.workMode}</span></div>
