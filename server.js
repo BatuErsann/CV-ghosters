@@ -4,7 +4,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const Busboy = require("busboy");
-const { Pool } = require("pg");
+const { createDatabase } = require("./src/database");
 const { createClient } = require("@supabase/supabase-js");
 const { extractCandidate, findBestMatch, diffVersion } = require("./src/domain");
 const { recognizeImage } = require("./src/ocr");
@@ -49,9 +49,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const SUPABASE_STORAGE_BUCKET = process.env.SUPABASE_STORAGE_BUCKET || "evidence";
 const ADSENSE_CLIENT = /^ca-pub-\d+$/.test(process.env.PUBLIC_ADSENSE_CLIENT || "") ? process.env.PUBLIC_ADSENSE_CLIENT : "";
-const ADSENSE_HEAD_SCRIPT = ADSENSE_CLIENT ? `<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}" crossorigin="anonymous"></script>` : "";
-let databasePool = null;
-let databaseReady = null;
+const ADSENSE_SLOT = /^\d{10}$/.test(process.env.PUBLIC_ADSENSE_SLOT || "") ? process.env.PUBLIC_ADSENSE_SLOT : "";
+const ADSENSE_VERIFICATION = ADSENSE_CLIENT ? `<meta name="google-adsense-account" content="${ADSENSE_CLIENT}" />` : "";
+const database = createDatabase(DATABASE_URL);
 let storageClient = null;
 
 function id(prefix) {
@@ -283,11 +283,12 @@ function localWriteStore(store) {
 }
 
 async function ensureDatabase() {
-  if (!DATABASE_URL) return null;
-  if (!databasePool) databasePool = new Pool({ connectionString: DATABASE_URL, max: 3, ssl: { rejectUnauthorized: false } });
-  if (!databaseReady) databaseReady = databasePool.query("CREATE TABLE IF NOT EXISTS cvghost_app_state (id text PRIMARY KEY, payload jsonb NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())");
-  await databaseReady;
-  return databasePool;
+  if (!database && process.env.VERCEL) {
+    const error = new Error("İlan arşivine şu anda ulaşılamıyor. Lütfen biraz sonra tekrar deneyin.");
+    error.code = "DATA_UNAVAILABLE";
+    throw error;
+  }
+  return database;
 }
 
 async function readStore() {
@@ -703,11 +704,17 @@ async function route(request, response) {
   const requestUrl = new URL(request.url, `http://${request.headers.host || "localhost"}`);
   const pathname = requestUrl.pathname;
   if (pathname === "/api/health") return sendJson(response, 200, { ok: true, service: "ilan-iz", now: new Date().toISOString() });
+  if (pathname === "/api/readiness") {
+    const pool = await ensureDatabase();
+    if (pool) await pool.query("SELECT 1 AS ok");
+    else localReadStore();
+    return sendJson(response, 200, { ok: true, dataAvailable: true });
+  }
 
   if (pathname.startsWith("/api/")) {
     if (!checkRateLimit(request, pathname)) return sendError(response, 429, "RATE_LIMITED", "Bu işlem için kısa süreli istek sınırına ulaşıldı.");
     if (request.method === "GET" && pathname === "/api/ads-config") {
-      return sendJson(response, 200, { enabled: Boolean(ADSENSE_CLIENT), client: ADSENSE_CLIENT || null });
+      return sendJson(response, 200, { enabled: Boolean(ADSENSE_CLIENT && ADSENSE_SLOT), client: ADSENSE_CLIENT || null, slot: ADSENSE_SLOT || null, mode: "manual" });
     }
     if (request.method === "GET" && pathname === "/api/admin/setup-status") {
       return sendJson(response, 200, { configured: Boolean(ADMIN_TOTP_SECRET && ADMIN_2FA_SETUP_COMPLETE), usernameConfigured: Boolean(ADMIN_USERNAME && ADMIN_PASSWORD_HASH) });
@@ -946,10 +953,10 @@ async function route(request, response) {
   const filePath = path.normalize(path.join(PUBLIC_DIR, relative));
   if (!filePath.startsWith(PUBLIC_DIR)) return sendError(response, 403, "FORBIDDEN", "Erişim reddedildi.");
   if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) return sendError(response, 404, "NOT_FOUND", "Sayfa bulunamadı.");
-  const contentTypes = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml" };
+  const contentTypes = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".svg": "image/svg+xml", ".txt": "text/plain; charset=utf-8" };
   response.writeHead(200, { "Content-Type": contentTypes[path.extname(filePath)] || "application/octet-stream" });
   if (path.extname(filePath) === ".html") {
-    const html = fs.readFileSync(filePath, "utf8").replace("<!-- ADSENSE_HEAD -->", ADSENSE_HEAD_SCRIPT);
+    const html = fs.readFileSync(filePath, "utf8").replace("<!-- ADSENSE_HEAD -->", ADSENSE_VERIFICATION);
     return response.end(html);
   }
   fs.createReadStream(filePath).pipe(response);
@@ -957,6 +964,10 @@ async function route(request, response) {
 
 const server = http.createServer((request, response) => {
   route(request, response).catch((error) => {
+    if (error.code === "DATA_UNAVAILABLE") {
+      console.error("Database unavailable:", error.cause?.code || "NOT_CONFIGURED");
+      return sendJson(response, 503, { error: { code: error.code, message: error.message } }, { "Retry-After": "30" });
+    }
     console.error(error);
     sendError(response, 500, "INTERNAL_ERROR", "Beklenmeyen bir hata oluştu.");
   });

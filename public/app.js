@@ -1,4 +1,4 @@
-const state = { listings: [], selectedId: null, mode: "ALL", query: "" };
+const state = { listings: [], selectedId: null, mode: "ALL", query: "", archiveReady: false, pendingReads: 0, archiveError: false };
 const deviceId = localStorage.getItem("ilaniz-device-id") || (() => { const value = `device_${Date.now()}_${Math.random().toString(16).slice(2)}`; localStorage.setItem("ilaniz-device-id", value); return value; })();
 let recentFilter = "all";
 const $ = (selector) => document.querySelector(selector);
@@ -12,10 +12,50 @@ const modeIcon = { REMOTE: "⌁", HYBRID: "⇄", ONSITE: "⌂", UNSPECIFIED: "·
 async function api(path, options) {
   const requestOptions = options || {};
   const headers = requestOptions.body instanceof FormData ? {} : { "Content-Type": "application/json" };
-  const response = await fetch(path, { ...requestOptions, headers: { ...headers, ...(requestOptions.headers || {}) } });
-  const body = await response.json();
-  if (!response.ok) { const error = new Error(body.error?.message || "Beklenmeyen bir hata oluştu."); error.payload = body; error.status = response.status; throw error; }
-  return body;
+  const contentRead = !requestOptions.method || requestOptions.method === "GET";
+  if (contentRead) { state.pendingReads += 1; updateArchiveState(); }
+  try {
+    const response = await fetch(path, { ...requestOptions, headers: { ...headers, ...(requestOptions.headers || {}) } });
+    const body = await response.json();
+    if (!response.ok) { const error = new Error(body.error?.message || "Beklenmeyen bir hata oluştu."); error.payload = body; error.status = response.status; throw error; }
+    return body;
+  } catch (error) {
+    if (contentRead) showArchiveError();
+    throw error;
+  } finally {
+    if (contentRead) { state.pendingReads -= 1; updateArchiveState(); }
+  }
+}
+
+function updateArchiveState() {
+  document.documentElement.dataset.archiveState = state.archiveError ? "error" : state.archiveReady && state.pendingReads === 0 ? "ready" : "loading";
+  window.dispatchEvent(new Event("cvghost:content-ready"));
+}
+
+function showArchiveError() {
+  state.archiveError = true;
+  state.archiveReady = false;
+  const status = $("#archive-status");
+  status.innerHTML = `<strong>İlan arşivi şu anda yüklenemiyor</strong><p>Bağlantı geçici olarak kesilmiş olabilir. Biraz sonra yeniden deneyebilirsiniz.</p><button class="secondary-button" id="retry-archive">Yeniden dene</button>`;
+  status.classList.remove("hidden");
+  $("#retry-archive").addEventListener("click", loadInitialData);
+  $$("#metrics .skeleton").forEach((item) => item.classList.remove("skeleton"));
+  updateArchiveState();
+}
+
+async function loadInitialData() {
+  state.archiveReady = false;
+  state.archiveError = false;
+  $("#archive-status").classList.add("hidden");
+  updateArchiveState();
+  const results = await Promise.allSettled([
+    api("/api/stats").then((stats) => { renderMetrics(stats); renderInsights(stats); }),
+    loadListings(),
+    loadRecent()
+  ]);
+  if (results.some((result) => result.status === "rejected")) showArchiveError();
+  else state.archiveReady = true;
+  updateArchiveState();
 }
 
 function initials(company) { return company.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase(); }
@@ -55,7 +95,8 @@ async function loadListings() {
   if (!state.selectedId && state.listings[0]) state.selectedId = state.listings[0].id;
   if (state.selectedId && !state.listings.some((item) => item.id === state.selectedId)) state.selectedId = state.listings[0]?.id || null;
   renderListings();
-  if (state.selectedId) renderDetail(state.selectedId);
+  if (state.selectedId) await renderDetail(state.selectedId);
+  else $("#detail-panel").innerHTML = `<div class="empty-detail"><h3>Gösterilecek ilan yok</h3><p>Farklı bir arama veya filtre deneyin.</p></div>`;
   window.dispatchEvent(new Event("cvghost:content-ready"));
 }
 
@@ -118,18 +159,22 @@ function setupNavigation() {
     const view = button.dataset.view;
     $$(".nav-item").forEach((item) => item.classList.toggle("active", item === button));
     ["discover", "timeline", "stats", "companies"].forEach((name) => $(`#${name}-view`).classList.toggle("hidden", name !== view));
-    if (view === "timeline") await loadActivity();
-    if (view === "stats") await loadStats();
-    if (view === "companies") await loadCompanies();
+    try {
+      if (view === "timeline") await loadActivity();
+      if (view === "stats") await loadStats();
+      if (view === "companies") await loadCompanies();
+    } catch (error) { showToast(error.message); }
+    updateArchiveState();
   }));
 }
 
 $("#open-submit").addEventListener("click", openSubmit); $("#sidebar-submit").addEventListener("click", openSubmit); $("#close-submit").addEventListener("click", closeSubmit);
 $("#submit-modal").addEventListener("click", (event) => { if (event.target.id === "submit-modal") closeSubmit(); });
-$("#search").addEventListener("input", (event) => { state.query = event.target.value; loadListings(); });
-$$('.filter').forEach((button) => button.addEventListener("click", () => { $$('.filter').forEach((item) => item.classList.toggle("selected", item === button)); state.mode = button.dataset.mode; loadListings(); }));
+$("#search").addEventListener("input", (event) => { state.query = event.target.value; loadListings().catch((error) => showToast(error.message)); });
+$$('.filter').forEach((button) => button.addEventListener("click", () => { $$('.filter').forEach((item) => item.classList.toggle("selected", item === button)); state.mode = button.dataset.mode; loadListings().catch((error) => showToast(error.message)); }));
 $$('[data-recent-filter]').forEach((button) => button.addEventListener("click", async () => { recentFilter = button.dataset.recentFilter; $$('[data-recent-filter]').forEach((item) => item.classList.toggle("selected", item === button)); await loadRecent(); }));
 $("#submit-form").addEventListener("submit", async (event) => { event.preventDefault(); const form = new FormData(event.currentTarget); const result = $("#form-result"); const file = form.get("evidence"); const hasFile = file && file.size > 0; form.append("deviceId", deviceId); try { let body; if (hasFile) { body = form; } else { body = JSON.stringify({ sourceUrl: form.get("sourceUrl"), rawText: "", inputType: "TEXT", deviceId, appliedAt: form.get("appliedAt"), repostedAt: form.get("repostedAt"), cvViewedStatus: form.get("cvViewedStatus") }); } const data = await api("/api/submissions", { method: "POST", body }); result.classList.remove("hidden"); result.style.background = "#edf8e8"; result.style.color = "#527c58"; result.innerHTML = `<strong>OCR tamamlandı</strong><br>${data.applicationInsight?.label || "Başvuru hareketi kaydedildi"}: ${data.applicationInsight?.detail || "Kayıt havuza eklendi."}`; await loadListings(); await loadRecent(); state.selectedId = data.listing.id; await renderDetail(data.listing.id); showToast("Başvuru kanıtı son eklenenlere eklendi."); setTimeout(closeSubmit, 1800); } catch (error) { result.classList.remove("hidden"); result.style.background = "#fff0ed"; result.style.color = "#a15747"; result.textContent = error.message; } });
 
 window.addEventListener("hashchange", () => { if (location.hash.startsWith("#company=")) openCompany(decodeURIComponent(location.hash.slice(9))); });
-(async function init() { setupNavigation(); try { const stats = await api("/api/stats"); renderMetrics(stats); renderInsights(stats); await loadListings(); await loadRecent(); } catch (error) { showToast(error.message); } })();
+setupNavigation();
+loadInitialData();

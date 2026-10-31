@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0c1715" />
     <title>CV ghostlayanlar — İş ilanlarının geçmişi</title>
-    <link rel="stylesheet" href="/styles.css?v=5" />
+    <meta name="description" content="İş ilanlarının yeniden yayınlanma geçmişini, başvuru tarihlerini ve CV görüntülenme bildirimlerini topluluk kanıtlarıyla karşılaştırın." />
+    <link rel="stylesheet" href="/styles.css?v=6" />
     <!-- ADSENSE_HEAD -->
   </head>
   <body>
@@ -39,6 +40,7 @@
             <button class="primary-button" id="open-submit"><span>＋</span> İlan ekle</button>
           </div>
 
+          <section class="archive-status hidden" id="archive-status" role="status" aria-live="polite"></section>
           <div class="metric-grid" id="metrics"><div class="metric-card skeleton"></div><div class="metric-card skeleton"></div><div class="metric-card skeleton"></div></div>
 
           <div class="shame-heading" aria-label="Utanç tablosu">Utanç tablosu</div>
@@ -52,6 +54,16 @@
           <div class="section-heading"><div><h2>İlan keşfi</h2><p>Topluluk tarafından son görülen ilanlar</p></div><div class="view-toggle"><button class="selected">▦</button><button>☷</button></div></div>
           <div class="toolbar"><label class="search-box"><span>⌕</span><input id="search" type="search" placeholder="Pozisyon, şirket veya lokasyon ara..." /></label><div class="filter-pills"><button class="filter selected" data-mode="ALL">Tümü</button><button class="filter" data-mode="REMOTE">Uzaktan</button><button class="filter" data-mode="HYBRID">Hibrit</button><button class="filter" data-mode="ONSITE">Ofis</button></div><button class="filter-button">☷ Filtrele</button></div>
           <div class="listing-layout"><div class="listing-grid" id="listing-grid"></div><aside class="detail-panel" id="detail-panel"><div class="empty-detail"><div class="empty-orb">⌁</div><h3>Bir ilan seçin</h3><p>Geçmişini, değişikliklerini ve topluluk sinyallerini görmek için listeden bir ilan seçin.</p></div></aside></div>
+          <aside id="content-ad" class="content-ad" aria-label="Reklam" hidden><small>Reklam</small></aside>
+          <section class="archive-guide" aria-labelledby="archive-guide-title">
+            <h2 id="archive-guide-title">İlan geçmişini nasıl yorumlamalısınız?</h2>
+            <p>CV ghostlayanlar, bir ilana yaptığınız başvuru ile ilanın sonraki yayınlarını aynı zaman çizgisinde karşılaştırmanıza yardımcı olur. İlan ekran görüntüsündeki şirket, pozisyon, başvuru tarihi ve yeniden yayınlanma bilgileri okunur; kaydı ekleyen kişi bu bilgileri kontrol edip onaylar.</p>
+            <h3>Tekrar yayınlanan ilan ne anlatır?</h3>
+            <p>Başvurudan sonra yeniden yayınlanan bir ilan ve henüz görüntülenmemiş bir CV, takip edilebilecek bir sinyaldir. Bu durum tek başına şirketin aday havuzu oluşturduğunu veya ilanın gerçek olmadığını kanıtlamaz. Birden fazla pozisyon için alım yapılması, işe alım süresinin uzaması veya platformun otomatik yenilemesi de tekrar yayına yol açabilir.</p>
+            <h3>Karşılaştırma ve doğrulama</h3>
+            <p>Aynı şirket ve pozisyonun farklı tarihlerdeki kayıtlarını karşılaştırın. “CV görüntülenmedi” bilgisi, kullanıcının başvuru platformunda gördüğü durumu yansıtır; şirketin tüm işe alım sistemlerindeki hareketleri göstermez. Göreli tarihler ekran görüntüsünün alındığı güne bağlıdır. Eksik okunan alanlar kullanıcı tarafından tamamlanır ve kaynak bağlantısı yardımcı kontrol olarak kullanılır.</p>
+            <p>Bir kayıtta yanlış bilgi görürseniz ilan detayındaki “Raporla” seçeneğini kullanabilirsiniz. Kanıt eklemeden önce adınız, iletişim bilgileriniz ve diğer adaylara ait kişisel bilgileri görüntüden kaldırın.</p>
+          </section>
         </section>
 
         <section class="content-wrap hidden" id="timeline-view"><div class="page-intro"><div class="eyebrow">AKIŞ</div><h1>Son değişiklikler</h1><p>Topluluğun son katkıları ve ilan geçmişindeki hareketler.</p></div><div class="activity-feed" id="activity-feed"></div></section>
@@ -62,8 +74,8 @@
 
     <div class="modal-backdrop hidden" id="submit-modal"><div class="modal"><button class="modal-close" id="close-submit">×</button><div class="eyebrow">BAŞVURU KANITI</div><h2>Başvuru hareketini kaydet</h2><p class="modal-subtitle">İlan ekran görüntüsünü yükle. İlan bilgilerini OCR çıkaracak; senden yalnızca CV görüntülenme durumunu alacağız.</p><form id="submit-form"><label>İlan görseli <span>zorunlu · PNG, JPG veya WEBP · maksimum 8 MB</span><input name="evidence" type="file" accept="image/png,image/jpeg,image/webp" required /></label><label>CV görüntülenme durumu<select name="cvViewedStatus"><option value="NOT_VIEWED">CV görüntülenmedi</option><option value="UNKNOWN">Bilinmiyor</option><option value="VIEWED">CV görüntülendi</option></select></label><label>Kaynak URL <span>OCR kritik alanları kaçırırsa doğrulama için istenir</span><input name="sourceUrl" type="url" placeholder="https://..." /></label><div class="form-hint">OCR; pozisyon, şirket, lokasyon ve diğer ilan bilgilerini görselden çıkarır. Okuma başarısız olursa eksik alanları ve doğrulama linkini isteyeceğiz.</div><button class="primary-button full" type="submit">OCR ile analiz et <span>→</span></button></form><div class="form-result hidden" id="form-result"></div><div class="confirmation-panel hidden" id="confirmation-panel"><div class="confirmation-title">Son durumu onaylayın</div><p class="confirmation-copy">OCR’ın çıkardığı bilgileri kontrol edin. Onaydan sonra kayıt son eklenenlerde görünür.</p><div id="confirmation-details" class="confirmation-details"></div><div class="confirmation-actions"><button class="secondary-button" id="cancel-confirmation" type="button">Düzenle</button><button class="primary-button" id="confirm-submission" type="button">Durumu onayla <span>→</span></button></div></div><div class="manual-fallback hidden" id="manual-fallback"><div class="fallback-title">OCR bazı alanları okuyamadı</div><p id="fallback-message">Eksik alanları doldurun; kaynak linkiyle kontrol edeceğiz.</p><form id="manual-form"><label>Pozisyon<input name="manualTitle" type="text" /></label><label>Şirket<input name="manualCompany" type="text" /></label><label>Lokasyon<input name="manualLocation" type="text" /></label><button class="primary-button full" type="submit">Linkle doğrula ve kaydet <span>→</span></button></form></div></div></div>
     <div class="toast hidden" id="toast"></div>
-    <script src="/app.js?v=5"></script>
+    <script src="/app.js?v=6"></script>
     <script src="/interaction-overrides.js?v=4"></script>
-    <script src="/ads.js?v=3"></script>
+    <script src="/ads.js?v=4"></script>
   </body>
 </html>

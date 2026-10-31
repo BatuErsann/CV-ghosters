@@ -42,3 +42,9 @@ npm run check
 ```
 
 İlk çalıştırmada `data/store.json` otomatik oluşturulur. Bu dosya yerel demo verisini içerir.
+
+## Üretim ve reklamlar
+
+Vercel'de `DATABASE_URL` kalıcı PostgreSQL veritabanını göstermelidir. Supabase projesi duraklatılırsa panelden Resume ile geri alınır. Bağlantı hatasından sonra sunucu sonraki istekte yeniden dener; veriler yerine demo kayıtlar döndürülmez. `/api/readiness` veritabanına gerçek bir sorgu yapar ve bağlantı yoksa 503 döndürür. `/api/health` yalnızca HTTP sunucusunun çalıştığını belirtir.
+
+AdSense sahiplik doğrulaması `PUBLIC_ADSENSE_CLIENT` ile oluşturulan meta etiketi ve `/ads.txt` üzerinden yapılır. AdSense panelinde otomatik reklamlar kapalı kalmalıdır. `PUBLIC_ADSENSE_SLOT` boşken reklam betiği hiç yüklenmez. Onaylı bir manuel görüntülü reklam birimi tanımlandığında reklam yalnızca başarıyla yüklenmiş, ilan içeren keşif görünümünde istenir; boş sonuçlarda, hata/yüklenme durumlarında ve kanıt ekleme penceresinde gizlenir. Otomatik reklamları açmak bu sayfa kontrolünü geçersiz kılar.
