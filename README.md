@@ -49,4 +49,6 @@ Vercel'de `DATABASE_URL` kalıcı PostgreSQL veritabanını göstermelidir. Supa
 
 Yeni üretim arşivleri boş başlar. Üç eski geliştirme örneği herkese açık ilan, şirket ve istatistik sonuçlarından hariç tutulur; depodaki kayıtlar ve yerel OCR denemeleri silinmez veya otomatik taşınmaz. Gerçek kayıtlar görsel yükleme ve kullanıcı onayı akışıyla eklenir.
 
+Sektör tercihi bu tarayıcıda saklanır. İlan, şirket, son eklenenler ve istatistik uçları `?sector=SOFTWARE` gibi aynı filtreyi kullanır; `ALL` tüm alanları gösterir. Başlık üzerinden önerilen meslek alanı OCR onay ekranında düzeltilebilir ve ilan sürümüne kaydedilir. Sınıflandırma şirketin faaliyet alanına göre yapılmaz. Farklı sektördeki pozisyonlar aynı ilan geçmişine birleştirilmez.
+
 AdSense sahiplik doğrulaması `PUBLIC_ADSENSE_CLIENT` ile oluşturulan meta etiketi ve `/ads.txt` üzerinden yapılır. AdSense panelinde otomatik reklamlar kapalı kalmalıdır. `PUBLIC_ADSENSE_SLOT` boşken reklam betiği hiç yüklenmez. Onaylı bir manuel görüntülü reklam birimi tanımlandığında reklam yalnızca başarıyla yüklenmiş, ilan içeren keşif görünümünde istenir; boş sonuçlarda, hata/yüklenme durumlarında ve kanıt ekleme penceresinde gizlenir. Otomatik reklamları açmak bu sayfa kontrolünü geçersiz kılar.

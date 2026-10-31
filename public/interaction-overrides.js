@@ -30,7 +30,8 @@
     fallback.classList.add("hidden");
     confirmation.classList.remove("hidden");
     const item = data.preview;
-    confirmationDetails.innerHTML = `<div><span>Pozisyon</span><strong>${item.title || "—"}</strong></div><div><span>Şirket</span><strong>${item.company || "—"}</strong></div><div><span>Lokasyon</span><strong>${item.location || "—"}</strong></div><div><span>Çalışma modeli</span><strong>${item.workMode || "—"}</strong></div><div><span>CV durumu</span><strong>${document.querySelector('[name="cvViewedStatus"]').selectedOptions[0].textContent}</strong></div><div class="confirmation-signal"><span>Son durum</span><strong>${data.applicationInsight?.label || "Takipte"}</strong><small>${data.applicationInsight?.detail || "Başvuru hareketi izleniyor."}</small></div>`;
+    confirmationDetails.innerHTML = `<div><span>Pozisyon</span><strong>${escapeHtml(item.title || "—")}</strong></div><div><span>Şirket</span><strong>${escapeHtml(item.company || "—")}</strong></div><div><span>Lokasyon</span><strong>${escapeHtml(item.location || "—")}</strong></div><div><span>Çalışma modeli</span><strong>${escapeHtml(item.workMode || "—")}</strong></div><div><span>CV durumu</span><strong>${escapeHtml(document.querySelector('[name="cvViewedStatus"]').selectedOptions[0].textContent)}</strong></div><label class="confirmation-sector">İlanın sektörü<select id="confirmation-sector">${SectorCatalog.sectors.map((sector) => `<option value="${sector.id}">${sector.label}</option>`).join("")}</select></label><div class="confirmation-signal"><span>Son durum</span><strong>${escapeHtml(data.applicationInsight?.label || "Takipte")}</strong><small>${escapeHtml(data.applicationInsight?.detail || "Başvuru hareketi izleniyor.")}</small></div>`;
+    document.querySelector("#confirmation-sector").value = item.sector;
     showResult("<strong>OCR tamamlandı.</strong><br>Kaydetmeden önce son durumu kontrol edin.", "warning");
   }
 
@@ -39,7 +40,8 @@
     const cvViewedStatus = document.querySelector('[name="cvViewedStatus"]').value;
     if (confirmButton) { confirmButton.disabled = true; confirmButton.innerHTML = `<span class="loading-spinner"></span> Kaydediliyor...`; }
     try {
-      const response = await api(`/api/submissions/${pendingPreview.previewToken}/confirm`, { method: "POST", body: JSON.stringify({ deviceId, cvViewedStatus }) });
+      const sector = document.querySelector("#confirmation-sector").value;
+      const response = await api(`/api/submissions/${pendingPreview.previewToken}/confirm`, { method: "POST", body: JSON.stringify({ deviceId, cvViewedStatus, sector }) });
       confirmation.classList.add("hidden");
       await finish(response, "Kayıt onaylandı");
     } catch (error) {
@@ -50,10 +52,11 @@
 
   async function finish(data, successMessage) {
     showResult(`<strong>${successMessage}</strong><br>${data.applicationInsight?.detail || "Başvuru kanıtı kaydedildi."}`, "success");
-    await loadListings();
-    await loadRecent();
-    await selectListing(data.listing.id);
-    showToast("Son durum son eklenenlere eklendi.");
+    await loadInitialData();
+    if (state.sector === "ALL" || state.sector === data.listing.sector) {
+      await selectListing(data.listing.id);
+      showToast("Son durum son eklenenlere eklendi.");
+    } else showToast(`Kayıt ${SectorCatalog.label(data.listing.sector)} alanına eklendi; mevcut sektör filtrenizin dışında.`);
     setTimeout(closeSubmit, 1800);
   }
 

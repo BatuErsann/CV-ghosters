@@ -5,7 +5,8 @@ const crypto = require("node:crypto");
 const { URL } = require("node:url");
 const Busboy = require("busboy");
 const { createDatabase } = require("./src/database");
-const { publicArchive, emptyArchive } = require("./src/archive");
+const { publicArchive, emptyArchive, sectorArchive } = require("./src/archive");
+const { classifySector, isSector } = require("./public/sectors");
 const { createClient } = require("@supabase/supabase-js");
 const { extractCandidate, findBestMatch, diffVersion } = require("./src/domain");
 const { recognizeImage } = require("./src/ocr");
@@ -316,6 +317,7 @@ function serializeListing(listing) {
   const latest = latestVersion(listing);
   return {
     ...latest,
+    sector: classifySector(latest),
     id: listing.id,
     status: listing.status,
     firstSeenAt: listing.firstSeenAt,
@@ -427,6 +429,7 @@ function validateSubmission(body) {
   const fields = {};
   if (!body.rawText || String(body.rawText).trim().length < 20) fields.rawText = "En az 20 karakterlik ilan metni gerekli.";
   if (body.sourceUrl && !/^https?:\/\//i.test(body.sourceUrl)) fields.sourceUrl = "URL http:// veya https:// ile başlamalı.";
+  if (body.sector && !isSector(body.sector)) fields.sector = "Geçerli bir sektör seçin.";
   return fields;
 }
 
@@ -558,7 +561,8 @@ async function saveEvidence(evidence) {
 async function handleSubmission(store, body) {
   const submissionId = id("submission");
   const candidate = extractCandidate({ rawText: body.rawText, sourceUrl: body.sourceUrl || "" });
-  const match = findBestMatch(candidate, publicArchive(store).listings);
+  candidate.sector = classifySector({ ...candidate, sector: body.sector });
+  const match = findBestMatch(candidate, publicArchive(store).listings.filter((listing) => classifySector(latestVersion(listing)) === candidate.sector));
   const applicationInsight = calculateApplicationInsight({ appliedAt: body.appliedAt || candidate.appliedAt, repostedAt: body.repostedAt || candidate.repostedAt, cvViewedStatus: body.cvViewedStatus });
   const evidence = body.evidence?.buffer ? await saveEvidence(body.evidence) : body.evidence || null;
   const submission = {
@@ -628,6 +632,7 @@ function recentSubmissions(store, deviceId) {
         title: version.title,
         company: version.company,
         location: version.location,
+        sector: classifySector(version),
         createdAt: submission.createdAt,
         appliedAt: submission.appliedAt,
         repostedAt: submission.repostedAt,
@@ -645,6 +650,7 @@ function recentSubmissions(store, deviceId) {
 function previewCandidate(candidate) {
   return {
     title: candidate.title,
+    sector: classifySector(candidate),
     company: candidate.company,
     location: candidate.location,
     workMode: candidate.workMode,
@@ -664,6 +670,7 @@ function buildCompanyDirectory(store) {
     group.listings.push({
       id: listing.id,
       title: latest.title,
+      sector: classifySector(latest),
       location: latest.location,
       workMode: latest.workMode,
       status: listing.status,
@@ -797,7 +804,9 @@ async function route(request, response) {
       if (!requireAdmin(request, response)) return;
     }
     const store = await readStore();
-    const archive = publicArchive(store);
+    const sector = requestUrl.searchParams.get("sector") || "ALL";
+    if (sector !== "ALL" && !isSector(sector)) return sendError(response, 422, "INVALID_SECTOR", "Geçerli bir sektör seçin.");
+    const archive = request.method === "GET" ? sectorArchive(publicArchive(store), sector) : publicArchive(store);
     if (request.method === "GET" && pathname === "/api/stats") return sendJson(response, 200, buildStats(archive));
     if (request.method === "GET" && pathname === "/api/admin/listings") return sendJson(response, 200, { items: buildAdminListings(store), reportCount: store.reports.length });
     const adminDeleteMatch = pathname.match(/^\/api\/admin\/listings\/([^/]+)$/);
@@ -837,6 +846,7 @@ async function route(request, response) {
       const pending = pendingPreviews.get(confirmMatch[1]);
       if (!pending) return sendError(response, 404, "PREVIEW_EXPIRED", "Onay bekleyen OCR sonucu bulunamadı. Görseli yeniden yükleyin.");
       const confirmation = await readBody(request);
+      if (confirmation.sector && !isSector(confirmation.sector)) return sendError(response, 422, "INVALID_SECTOR", "Geçerli bir sektör seçin.");
       const finalBody = { ...pending.body, ...confirmation, deviceId: confirmation.deviceId || pending.body.deviceId, cvViewedStatus: confirmation.cvViewedStatus || pending.body.cvViewedStatus || "UNKNOWN" };
       const result = await handleSubmission(store, finalBody);
       await writeStore(store);
@@ -942,7 +952,8 @@ async function route(request, response) {
       const fields = validateSubmission(body);
       if (Object.keys(fields).length) return sendError(response, 422, "VALIDATION_ERROR", "Gönderilen veriler geçersiz.", fields);
       const candidate = extractCandidate({ rawText: body.rawText, sourceUrl: body.sourceUrl || "" });
-      const match = findBestMatch(candidate, archive.listings);
+      candidate.sector = classifySector({ ...candidate, sector: body.sector });
+      const match = findBestMatch(candidate, archive.listings.filter((listing) => classifySector(latestVersion(listing)) === candidate.sector));
       const applicationInsight = calculateApplicationInsight({ appliedAt: body.appliedAt || candidate.appliedAt, repostedAt: body.repostedAt || candidate.repostedAt, cvViewedStatus: body.cvViewedStatus });
       const previewToken = id("preview");
       pendingPreviews.set(previewToken, { body, createdAt: Date.now() });

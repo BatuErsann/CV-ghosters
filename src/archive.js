@@ -1,4 +1,5 @@
 const DEMO_IDS = new Set(["listing_acme_backend", "listing_northstar_product", "listing_orbit_data"]);
+const { classifySector } = require("../public/sectors");
 
 function publicArchive(store) {
   // Exclude known development fixtures without deleting stored records or
@@ -16,4 +17,11 @@ function emptyArchive() {
   return { listings: [], submissions: [], reports: [], corrections: [] };
 }
 
-module.exports = { publicArchive, emptyArchive };
+function sectorArchive(store, sector) {
+  if (sector === "ALL") return store;
+  const listings = store.listings.filter((listing) => classifySector(listing.versions.at(-1)) === sector);
+  const ids = new Set(listings.map((listing) => listing.id));
+  return { ...store, listings, submissions: store.submissions.filter((submission) => ids.has(submission.listingId)) };
+}
+
+module.exports = { publicArchive, emptyArchive, sectorArchive };

@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#0c1715" />
     <title>CV ghostlayanlar — İş ilanlarının geçmişi</title>
     <meta name="description" content="İş ilanlarının yeniden yayınlanma geçmişini, başvuru tarihlerini ve CV görüntülenme bildirimlerini topluluk kanıtlarıyla karşılaştırın." />
-    <link rel="stylesheet" href="/styles.css?v=6" />
+    <link rel="stylesheet" href="/styles.css?v=7" />
     <!-- ADSENSE_HEAD -->
   </head>
   <body>
@@ -33,6 +33,11 @@
           <div class="mobile-brand">CV <span class="brand-accent">ghostlayanlar</span></div>
           <div class="breadcrumbs"><span>Arşiv</span><b>/</b><strong>İlanları keşfet</strong></div>
         </header>
+
+        <section class="sector-bar" aria-label="Sektör tercihi">
+          <label for="sector-filter">Sektör seç<select id="sector-filter"><option value="ALL">Tüm sektörler</option></select></label>
+          <p id="sector-scope" aria-live="polite">İlanlar ve sıralamalar tüm sektörleri kapsıyor.</p>
+        </section>
 
         <section class="content-wrap" id="discover-view">
           <div class="hero-row">
@@ -74,8 +79,9 @@
 
     <div class="modal-backdrop hidden" id="submit-modal"><div class="modal"><button class="modal-close" id="close-submit">×</button><div class="eyebrow">BAŞVURU KANITI</div><h2>Başvuru hareketini kaydet</h2><p class="modal-subtitle">İlan ekran görüntüsünü yükle. İlan bilgilerini OCR çıkaracak; senden yalnızca CV görüntülenme durumunu alacağız.</p><form id="submit-form"><label>İlan görseli <span>zorunlu · PNG, JPG veya WEBP · maksimum 8 MB</span><input name="evidence" type="file" accept="image/png,image/jpeg,image/webp" required /></label><label>CV görüntülenme durumu<select name="cvViewedStatus"><option value="NOT_VIEWED">CV görüntülenmedi</option><option value="UNKNOWN">Bilinmiyor</option><option value="VIEWED">CV görüntülendi</option></select></label><label>Kaynak URL <span>OCR kritik alanları kaçırırsa doğrulama için istenir</span><input name="sourceUrl" type="url" placeholder="https://..." /></label><div class="form-hint">OCR; pozisyon, şirket, lokasyon ve diğer ilan bilgilerini görselden çıkarır. Okuma başarısız olursa eksik alanları ve doğrulama linkini isteyeceğiz.</div><button class="primary-button full" type="submit">OCR ile analiz et <span>→</span></button></form><div class="form-result hidden" id="form-result"></div><div class="confirmation-panel hidden" id="confirmation-panel"><div class="confirmation-title">Son durumu onaylayın</div><p class="confirmation-copy">OCR’ın çıkardığı bilgileri kontrol edin. Onaydan sonra kayıt son eklenenlerde görünür.</p><div id="confirmation-details" class="confirmation-details"></div><div class="confirmation-actions"><button class="secondary-button" id="cancel-confirmation" type="button">Düzenle</button><button class="primary-button" id="confirm-submission" type="button">Durumu onayla <span>→</span></button></div></div><div class="manual-fallback hidden" id="manual-fallback"><div class="fallback-title">OCR bazı alanları okuyamadı</div><p id="fallback-message">Eksik alanları doldurun; kaynak linkiyle kontrol edeceğiz.</p><form id="manual-form"><label>Pozisyon<input name="manualTitle" type="text" /></label><label>Şirket<input name="manualCompany" type="text" /></label><label>Lokasyon<input name="manualLocation" type="text" /></label><button class="primary-button full" type="submit">Linkle doğrula ve kaydet <span>→</span></button></form></div></div></div>
     <div class="toast hidden" id="toast"></div>
-    <script src="/app.js?v=6"></script>
-    <script src="/interaction-overrides.js?v=4"></script>
+    <script src="/sectors.js?v=1"></script>
+    <script src="/app.js?v=7"></script>
+    <script src="/interaction-overrides.js?v=5"></script>
     <script src="/ads.js?v=4"></script>
   </body>
 </html>

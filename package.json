@@ -8,7 +8,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "test": "node --test",
-    "check": "node --check server.js && node --check api/[...route].js && node --check src/domain.js && node --check src/database.js && node --check public/app.js && node --check public/ads.js && node --check public/admin.js"
+    "check": "node --check server.js && node --check api/[...route].js && node --check src/domain.js && node --check src/database.js && node --check src/archive.js && node --check public/sectors.js && node --check public/app.js && node --check public/interaction-overrides.js && node --check public/ads.js && node --check public/admin.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
